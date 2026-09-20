@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Java Professional Assessment</title>
+    <title>Java Assessment</title>
     <style>
         :root {
             --bg-base: #f1f5f9;
@@ -27,18 +27,49 @@
             min-height: 100vh;
             margin: 0;
             padding: 20px;
-            transition: background-color 0.3s ease;
+            transition: background-color 0.4s ease;
         }
 
-        /* Full Page Red Blink Alert Animation */
-        @keyframes pageRedBlink {
+        /* Full Page & Container Red Glow Blink Animation (Runs 2 times) */
+        @keyframes fullPageRedBlink {
             0% { background-color: var(--bg-base); }
             50% { background-color: #fee2e2; }
             100% { background-color: var(--bg-base); }
         }
 
-        .blink-alert {
-            animation: pageRedBlink 0.6s ease-in-out 2;
+        @keyframes boxRedGlow {
+            0% { border-color: var(--border-color); box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05); }
+            50% { border-color: #ef4444; box-shadow: 0 0 25px rgba(239, 68, 68, 0.3); }
+            100% { border-color: var(--border-color); box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05); }
+        }
+
+        @keyframes codeBoxRedGlow {
+            0% { border-color: var(--code-border); }
+            50% { border-color: #ef4444; box-shadow: 0 0 15px rgba(239, 68, 68, 0.2); }
+            100% { border-color: var(--code-border); }
+        }
+
+        .page-blink-active {
+            animation: fullPageRedBlink 0.6s ease-in-out 2;
+        }
+
+        .container-blink-active {
+            animation: boxRedGlow 0.6s ease-in-out 2;
+        }
+
+        .codebox-blink-active {
+            animation: codeBoxRedGlow 0.6s ease-in-out 2;
+        }
+
+        /* Timer Badge Pulsing Glow */
+        @keyframes pulseGlow {
+            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); }
+            70% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+
+        .timer-glow {
+            animation: pulseGlow 1.5s infinite;
         }
 
         .exam-container {
@@ -76,6 +107,7 @@
             font-size: 0.95rem;
             font-weight: 700;
             border: 1px solid transparent;
+            transition: all 0.3s ease;
         }
 
         .timer-green {
@@ -102,6 +134,25 @@
             line-height: 1.5;
         }
 
+        /* Welcome Start Screen */
+        #welcomeScreen {
+            padding: 40px;
+            text-align: center;
+        }
+
+        #welcomeScreen h2 {
+            color: #0f172a;
+            font-size: 1.8rem;
+            margin-bottom: 12px;
+        }
+
+        #welcomeScreen p {
+            color: var(--text-muted);
+            font-size: 1rem;
+            margin-bottom: 24px;
+            line-height: 1.5;
+        }
+
         /* Highlighted Code Window */
         .code-window {
             background: var(--code-bg);
@@ -111,6 +162,7 @@
             padding: 18px 20px;
             margin-bottom: 22px;
             overflow-x: auto;
+            transition: all 0.3s ease;
         }
 
         .code-window pre {
@@ -123,12 +175,12 @@
         }
 
         /* Syntax Highlighter Classes */
-        .tok-keyword { color: #d73a49; font-weight: bold; }  /* red/crimson */
-        .tok-type { color: #6f42c1; font-weight: bold; }     /* purple */
-        .tok-string { color: #0a7337; }                      /* green */
-        .tok-number { color: #005cc5; }                      /* blue */
-        .tok-comment { color: #6e7781; font-style: italic; } /* gray */
-        .tok-method { color: #b05a00; }                      /* amber/brown */
+        .tok-keyword { color: #d73a49; font-weight: bold; }
+        .tok-type { color: #6f42c1; font-weight: bold; }
+        .tok-string { color: #0a7337; }
+        .tok-number { color: #005cc5; }
+        .tok-comment { color: #6e7781; font-style: italic; }
+        .tok-method { color: #b05a00; }
 
         .editor-container {
             margin-bottom: 22px;
@@ -274,8 +326,16 @@
 <body id="pageBody">
 
     <div class="exam-container" id="mainContainer">
+        
+        <!-- Welcome Start Screen (Unlocks Audio) -->
+        <div id="welcomeScreen">
+            <h2>Java Fundamentals Assessment</h2>
+            <p>You will have exactly <strong>3 minutes</strong> per question.  AI help thisukoku.<br>ALL THE BEST BHARGAVI.</p>
+            <button class="btn-primary" onclick="startExamPortal()" style="padding: 14px 32px; font-size: 1.05rem;">Start Assessment &rarr;</button>
+        </div>
+
         <!-- Exam Active Screen -->
-        <div id="activeExam">
+        <div id="activeExam" style="display: none;">
             <div class="exam-header">
                 <span class="progress-indicator" id="progressText">Question 1 of 4</span>
                 <div class="timer-badge timer-green" id="timer">03:00</div>
@@ -284,7 +344,7 @@
             <div class="exam-body">
                 <div class="question-title" id="questionTitle">Loading question...</div>
                 
-                <div class="code-window">
+                <div class="code-window" id="codeWindowBox">
                     <pre><code id="codeSnippet"></code></pre>
                 </div>
 
@@ -409,14 +469,58 @@ if (correctPassword == userInput) {
 
         let currentIdx = 0;
         let timer;
-        let timeLeft = 180; // 3 minutes per question
+        let timeLeft = 180; // 3 minutes (180 seconds) per question
         let hasBlinked = false;
         const userResponses = new Array(questions.length).fill("");
         let reviewIdx = 0;
+        let audioCtx = null;
+
+        function startExamPortal() {
+            // Unlock browser audio context on user click
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            
+            document.getElementById('welcomeScreen').style.display = 'none';
+            document.getElementById('activeExam').style.display = 'block';
+            loadQuestion();
+        }
+
+        // Two-Tone Chime Alert Sound Generator using Web Audio API
+        function playChimeSound() {
+            try {
+                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                
+                const now = audioCtx.currentTime;
+                
+                // First Tone (G5)
+                const osc1 = audioCtx.createOscillator();
+                const gain1 = audioCtx.createGain();
+                oscillatorType = 'triangle';
+                osc1.frequency.setValueAtTime(783.99, now);
+                gain1.gain.setValueAtTime(0.15, now);
+                gain1.gain.exponentialRampToValueAtTime(0.0001, now + 0.25);
+                osc1.connect(gain1);
+                gain1.connect(audioCtx.destination);
+                osc1.start(now);
+                osc1.stop(now + 0.25);
+
+                // Second Tone (C6) - Higher Chime
+                const osc2 = audioCtx.createOscillator();
+                const gain2 = audioCtx.createGain();
+                osc2.frequency.setValueAtTime(1046.50, now + 0.2);
+                gain2.gain.setValueAtTime(0.2, now + 0.2);
+                gain2.gain.exponentialRampToValueAtTime(0.0001, now + 0.6);
+                osc2.connect(gain2);
+                gain2.connect(audioCtx.destination);
+                osc2.start(now + 0.2);
+                osc2.stop(now + 0.6);
+            } catch (e) {
+                console.log("Audio play error:", e);
+            }
+        }
 
         function startTimer() {
             clearInterval(timer);
-            timeLeft = 180;
+            timeLeft = 180; // 3:00
             hasBlinked = false;
             updateTimerDisplay();
 
@@ -424,10 +528,11 @@ if (correctPassword == userInput) {
                 timeLeft--;
                 updateTimerDisplay();
 
-                // Trigger 2-time red page blink at exactly 1 minute left
+                // Trigger chime sound and red blinking exactly at 1 minute left (60 seconds)
                 if (timeLeft === 60 && !hasBlinked) {
                     hasBlinked = true;
-                    triggerBlinkEffect();
+                    playChimeSound();
+                    triggerFullGlowEffect();
                 }
 
                 if (timeLeft <= 0) {
@@ -437,12 +542,20 @@ if (correctPassword == userInput) {
             }, 1000);
         }
 
-        function triggerBlinkEffect() {
+        function triggerFullGlowEffect() {
             const bodyEl = document.getElementById('pageBody');
-            bodyEl.classList.add('blink-alert');
+            const containerEl = document.getElementById('mainContainer');
+            const codeWindowEl = document.getElementById('codeWindowBox');
+
+            bodyEl.classList.add('page-blink-active');
+            containerEl.classList.add('container-blink-active');
+            codeWindowEl.classList.add('codebox-blink-active');
+
             setTimeout(() => {
-                bodyEl.classList.remove('blink-alert');
-            }, 1200);
+                bodyEl.classList.remove('page-blink-active');
+                containerEl.classList.remove('container-blink-active');
+                codeWindowEl.classList.remove('codebox-blink-active');
+            }, 1200); // matches animation duration (0.6s * 2)
         }
 
         function updateTimerDisplay() {
@@ -452,7 +565,7 @@ if (correctPassword == userInput) {
             timerEl.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
             
             if (timeLeft < 60) {
-                timerEl.className = "timer-badge timer-red";
+                timerEl.className = "timer-badge timer-red timer-glow";
             } else {
                 timerEl.className = "timer-badge timer-green";
             }
@@ -468,7 +581,6 @@ if (correctPassword == userInput) {
             document.getElementById('progressText').textContent = `Question ${currentIdx + 1} of ${questions.length}`;
             document.getElementById('questionTitle').textContent = q.prompt;
             
-            // Render syntax-highlighted code
             document.getElementById('codeSnippet').innerHTML = highlightJava(q.code);
             document.getElementById('userAnswer').value = userResponses[currentIdx] || "";
             
@@ -557,9 +669,6 @@ if (correctPassword == userInput) {
         function escapeHtml(text) {
             return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
         }
-
-        // Initialize on load
-        window.onload = loadQuestion;
     </script>
 </body>
 </html>
